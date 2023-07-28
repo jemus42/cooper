@@ -87,12 +87,29 @@ cv.fwelnet <- function(x, y, z, family = c("gaussian", "binomial", "cox"), lambd
                        t = 1, a = 0.5, thresh = 1e-3,
                        ...) {
     this.call <- match.call()
-
+    
     n <- nrow(x); p <- ncol(x); K <- ncol(z)
     family <- match.arg(family)
+    
+    if (inherits(y, "Surv") & family != "cox") {
+      warning("y is of class Surv(), forcing family = \"cox\"")
+      family <- "cox"
+    }
+    
     if (family != "cox") {
       # Previous default behavior unsuitable for y if Surv() object
       y <- as.vector(y)
+    }
+    
+    # Allow data.frame/categorical input for survival without intercept
+    # This is problematic though since it changes the number of columns in X
+    # and z has to be pre-specified based on the "effective" ncol(x)
+    if (is.data.frame(x)) {
+      x <- model.matrix(~ ., data = x)
+      
+      if (inherits(y, "Surv")) {
+        x <- x[, -1, drop = FALSE]
+      } 
     }
 
     # get type.measure
@@ -140,7 +157,7 @@ cv.fwelnet <- function(x, y, z, family = c("gaussian", "binomial", "cox"), lambd
         fits[[ii]] <- fwelnet(xc, yy, z, lambda = fit0$lambda, family = family,
                                verbose = verbose, t = t, a = a, thresh = thresh, ...)
     }
-
+    
     # get predictions
     predmat <- matrix(NA, n, length(fit0$lambda))
     for (ii in 1:nfolds) {
@@ -151,19 +168,29 @@ cv.fwelnet <- function(x, y, z, family = c("gaussian", "binomial", "cox"), lambd
         predmat[oo, 1:ncol(out)] <- out
       }
 
-      if (family == "cox") {
-        # If cox, add nll here?
-        # fit on test data
-        fits[[ii]]$nll <- glmnet::coxnet.deviance(
-          x = x[oo, , drop = F],
-          y = y[oo, , drop = F],
-          beta = fits[[ii]]$beta
-        )
-
-        # Get number of events in fold, if yy is Surv() obj. second column
-        # is status with 1 == event
-        # fits[[ii]]$n_events <- sum(y[oo, "status", drop = F])
-      }
+    #   if (family == "cox") {
+    #     # If cox, add nll here?
+    #     # fit on test data
+    #     # 
+    #     # tab <- table(y[oo, , drop = F][, 2])
+    #     # if (length(tab) < 2) browser()
+    #     # message("Censored: ", tab[[1]], " Events: ", tab[[2]])
+    #     events <- sum(y[oo, , drop = F][, 2])
+    #     
+    #     if (events <= 3) {
+    #       warning("No/few events in fold ", ii, " of ", nfolds, ": Found ", events, " event in fold of ", sum(oo), " and ", length(oo), " total.")
+    #     }
+    #     
+    #     fits[[ii]]$nll <- glmnet::coxnet.deviance(
+    #       x = x[oo, , drop = F],
+    #       y = y[oo, , drop = F],
+    #       beta = fits[[ii]]$beta
+    #     )
+    # 
+    #     # Get number of events in fold, if yy is Surv() obj. second column
+    #     # is status with 1 == event
+    #     # fits[[ii]]$n_events <- sum(y[oo, "status", drop = F])
+    #   }
     }
 
     # compute CV stuff (machinery borrowed from glmnet)
@@ -179,50 +206,33 @@ cv.fwelnet <- function(x, y, z, family = c("gaussian", "binomial", "cox"), lambd
                        class = "Misclassification Error",
                        auc = "AUC")
     } else if (family == "cox") {
-      # nll calc done above during fit step so access x, y in folds
-      # or better to use glmnet::coxnet.deviance probably
-      # nll per fold is fine for now unless it isn't?
-      cvstuff <- list(
-        # usually N x nlam matrix, but we only have nfold x nlam, so yeah.
-        # This is not a nice way to do it but it works, I guess
-        cvraw = t(vapply(fits, function(x) x$nll, FUN.VALUE = double(length(fit0$lambda)))),
-        weights = weights, # See above
-        # Number of events in fold maybe rather than raw N?
-        # N = vapply(fits, function(x) x$n_events, FUN.VALUE = double(1)),
-        type.measure = type.measure,
-        grouped = TRUE # for compatibility? see above
-      )
-      name <- "Cox Deviance"
+      name <- "Partial Likelihood Deviance"
+      # calculate deviances based on glmnet objects returned with the fwelnet fit, which contain the correct coefs
+      # but this way we save ourselves some re-invention of glmnet wheels by
+      # just using them directly, through a roundabout way.
+      # This is extremely cursed but I think it works?
+      coxnets <- lapply(fits, `[[`, "glmfit")
+      predmat <- glmnet:::buildPredmat.coxnetlist(coxnets, lambda = fit0$lambda, x, offset = NULL, foldid = foldid, 
+                                                  alignment = "lambda", y = y, weights = weights, grouped, 
+                                                  type.measure = type.measure, family = "cox")
+      #browser()
+      cvstuff = do.call(glmnet:::cv.coxnet, list(predmat, y, type.measure, weights, foldid, grouped))
+      grouped = cvstuff$grouped
+      if ((n/nfolds < 3) && grouped) {
+        warning("Option grouped=FALSE enforced in cv.fwelnet, since < 3 observations per fold", 
+                call. = FALSE)
+        grouped = FALSE
+      }
     }
 
-    # Hacky special handling for the somewhat incomplete cox case
-    # FIXME: All of this should just use glmnet machinery but time is finite
-    if (family == "cox") {
-      # average deviance per lambda across folds (rows = folds, cols = lambdas)
-      mean_nll_per_lambda <- apply(cvstuff$cvraw, 2, mean)
-      # index of lambda with smallest nll
-      best_lambda_i <- which.min(mean_nll_per_lambda)
-      lambda.min <- fit0$lambda[best_lambda_i]
-
-      out <- list(
-        glmfit = fit0,
-        lambda = fit0$lambda,
-        nzero = fit0$nzero,
-        # fit.preval=predmat.preval,
-        cvm = colMeans(cvstuff$cvraw),
-        # cvsd=cvsd,
-        # cvlo=cvlo,
-        # cvup=cvup,
-        lambda.min = lambda.min,
-        # lambda.1se=lambda.1se,
-        # foldid=foldid_copy,
-        name = name,
-        call = this.call
-      )
-      class(out) <- "cv.fwelnet"
-
-      return(out)
-    }
+    # # Hacky special handling for the somewhat incomplete cox case
+    # # FIXME: All of this should just use glmnet machinery but time is finite
+    # if (family == "cox") {
+    #   out = cvstats(cvstuff, foldid, nfolds, lambda, nz, grouped)
+    #   cvname = cvstuff$type.measure
+    #   #names(cvname) = cvstuff$type.measure
+    #   out = c(out, list(name = cvname, glmnet.fit = fit0))
+    # }
 
     cvout <- cvstats(cvstuff, foldid, nfolds, lambda, nz, cvstuff$grouped)
     cvm <- cvout$cvm
@@ -248,7 +258,7 @@ cv.fwelnet <- function(x, y, z, family = c("gaussian", "binomial", "cox"), lambd
         lambda.min <- fit0$lambda[imin]
         imin.1se <- which(cvm < cvm[imin] + cvsd[imin])[1]
         lambda.1se <- fit0$lambda[imin.1se]
-    }
+    } 
 
     out <- list(glmfit=fit0, lambda=fit0$lambda, nzero=fit0$nzero,
                 fit.preval=predmat.preval, cvm=cvm, cvsd=cvsd, cvlo=cvlo,
