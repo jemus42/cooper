@@ -1,15 +1,11 @@
 
-#xp <- c("time", "status", "sex", "age", "trt", "logbili", "logprotime", "protimegrp1", "protimegrp2", "stage3", "stage4")
-xp <- c("time", "status", "sex", "age", "trt", "logbili", "logprotime", "protimegrp", "stage")
-
-train <- riskRegression::simPBC(500)[xp]
-test <- riskRegression::simPBC(300)[xp]
-
-# table(train$status)
 
 test_that("low dim fitting", {
   set.seed(1)
-  fit <- suppressWarnings(fwelnet_mt_cox(train, standardize = TRUE, nfolds = 3, stratify_by_status = TRUE, mt_max_iter = 3))
+  train <- getpbc(500)
+  test <- getpbc(300)
+  
+  fit <- suppressWarnings(cooper(train, standardize = TRUE, nfolds = 3, stratify_by_status = TRUE, mt_max_iter = 3))
   coef_names <- c("sex", "age", "trt", "logbili", "logprotime", "protimegrp10-11", "protimegrp>11", "stage3", "stage4")
   
   for (i in 1:2) {
@@ -30,11 +26,6 @@ test_that("low dim fitting", {
       coef(fit, event = i, s = "lambda.min"),
       fit$fwelfits[[i]]$glmfit$glmfit$beta[, fit$fwelfits[[i]]$glmfit$lambda == fit$fwelfits[[i]]$lambda.min]
     )
-    
-    # lmin <- fit$fwelfits[[i]]$lambda.min
-    # lmin_idx <- which(fit$fwelfits[[i]]$glmfit$lambda == lmin)
-    # fit$fwelfits[[i]]$glmfit$glmfit$beta[, lmin_idx]
-    # fit$fwelfits[[i]]$glmfit$beta[, lmin_idx]
   }
   
 
@@ -42,7 +33,10 @@ test_that("low dim fitting", {
 
 test_that("low dim predict: risk", {
   set.seed(1)
-  fit <- suppressWarnings(fwelnet_mt_cox(train, standardize = TRUE, nfolds = 3, stratify_by_status = TRUE))
+  train <- getpbc(500)
+  test <- getpbc(300)
+  
+  fit <- suppressWarnings(cooper(train, standardize = TRUE, nfolds = 3, stratify_by_status = TRUE))
   
   eval_times <- quantile(train$time, seq(0.1, 0.5, 0.1), type = 2, names = FALSE)
   
@@ -66,7 +60,10 @@ test_that("low dim predict: risk", {
 
 test_that("low dim predict: absrisk", {
   set.seed(1)
-  fit <- suppressWarnings(fwelnet_mt_cox(train, standardize = TRUE, nfolds = 3, stratify_by_status = TRUE))
+  train <- getpbc(500)
+  test <- getpbc(300)
+  
+  fit <- suppressWarnings(cooper(train, standardize = TRUE, nfolds = 3, stratify_by_status = TRUE))
   
   eval_times <- quantile(train$time, seq(0.1, 0.5, 0.1), type = 2, names = FALSE)
   
@@ -85,6 +82,8 @@ test_that("low dim predict: absrisk", {
 
 
 test_that("various sanity checks", {
-  expect_error(fwelnet_mt_cox(train, standardize = TRUE, nfolds = 2))
+  set.seed(1)
+  train <- getpbc(500)
+  expect_error(cooper(train, standardize = TRUE, nfolds = 2))
   expect_warning(expect_error(cooper(train, standardize = TRUE, nfolds = 4, mt_max_iter = 1)))
 })
