@@ -13,7 +13,7 @@
 #' @param y `y` matrix as in `fwelnet`.
 #' @param z `z` matrix as in `fwelnet`.
 #' @param family Response type. Either `"gaussian"` (default) for linear
-#' regression or `"binomial"` for logistic regression.
+#' regression, `"binomial"` for logistic regression, or `"cox"` for Cox regression.
 #' @param lambda A user supplied `lambda` sequence. Typical usage is to
 #' have the program compute its own `lambda` sequence; supplying a value of
 #' lambda overrides this.
@@ -82,7 +82,7 @@
 #' @importFrom glmnet glmnet coxnet.deviance
 #' @export
 cv.fwelnet <- function(x, y, z, family = c("gaussian", "binomial", "cox"), lambda = NULL,
-                       type.measure = c("mse", "deviance", "class", "auc", "mae", "nll"),
+                       type.measure = c("mse", "deviance", "class", "auc", "mae"),
                        nfolds = 10, foldid = NULL, keep = FALSE, verbose = FALSE, 
                        t = 1, a = 0.5, thresh = 1e-3,
                        ...) {
@@ -152,17 +152,13 @@ cv.fwelnet <- function(x, y, z, family = c("gaussian", "binomial", "cox"), lambd
       }
 
       if (family == "cox") {
-        # If cox, add nll here?
+        # If cox, add nll here
         # fit on test data
         fits[[ii]]$nll <- glmnet::coxnet.deviance(
           x = x[oo, , drop = F],
           y = y[oo, , drop = F],
           beta = fits[[ii]]$beta
         )
-
-        # Get number of events in fold, if yy is Surv() obj. second column
-        # is status with 1 == event
-        # fits[[ii]]$n_events <- sum(y[oo, "status", drop = F])
       }
     }
 

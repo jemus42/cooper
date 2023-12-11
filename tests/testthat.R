@@ -1,4 +1,4 @@
 library(testthat)
-library(fwelnet)
+library(cooper)
 
-test_check("fwelnet")
+test_check("cooper")

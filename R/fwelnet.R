@@ -313,7 +313,7 @@ fwelnet <- function(x, y, z, lambda = NULL, family = c("gaussian", "binomial", "
     nzero <- colSums(beta != 0)
     
     if (standardize) {
-      # A hacky bit (surprise!): To enable downstream use of survival::survfit using glmnet/coxnet objects, we hackily
+      # To enable downstream use of survival::survfit using glmnet/coxnet objects, we hackily
       # store the internal glmnet fit inside the fwelnet fit inside the cv.fwelnet fit. This is annoying but at least
       # I don't have to reverse engineer what glmnet:::survfit.coxnet does (I tried).
       # Caveat: If `standardize = TRUE`, glmnet is still called with standardize = FALSE inside of fwelnet during its

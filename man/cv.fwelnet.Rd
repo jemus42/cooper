@@ -10,7 +10,7 @@ cv.fwelnet(
   z,
   family = c("gaussian", "binomial", "cox"),
   lambda = NULL,
-  type.measure = c("mse", "deviance", "class", "auc", "mae", "nll"),
+  type.measure = c("mse", "deviance", "class", "auc", "mae"),
   nfolds = 10,
   foldid = NULL,
   keep = FALSE,
@@ -29,7 +29,7 @@ cv.fwelnet(
 \item{z}{\code{z} matrix as in \code{fwelnet}.}
 
 \item{family}{Response type. Either \code{"gaussian"} (default) for linear
-regression or \code{"binomial"} for logistic regression.}
+regression, \code{"binomial"} for logistic regression, or \code{"cox"} for Cox regression.}
 
 \item{lambda}{A user supplied \code{lambda} sequence. Typical usage is to
 have the program compute its own \code{lambda} sequence; supplying a value of
