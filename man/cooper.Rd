@@ -7,6 +7,8 @@
 \usage{
 cooper(
   data,
+  time = "time",
+  status = "status",
   causes = 1:2,
   strata = NULL,
   mt_max_iter = 5,
@@ -27,6 +29,8 @@ cooper(
 
 fwelnet_mt_cox(
   data,
+  time = "time",
+  status = "status",
   causes = 1:2,
   strata = NULL,
   mt_max_iter = 5,
@@ -49,6 +53,10 @@ fwelnet_mt_cox(
 \item{data}{A data.frame or matrix holding predictors and outcome,
 with outcome variables assumed to be named \code{"time"} and \code{"status"}.}
 
+\item{time, status}{\verb{("time", "status")} Quoted names of time and status indicator variables, respectively.
+Assumes \code{status} is encodes as \code{0}: censored, \code{1}:event 1, \code{2}: event 2.
+Outcome will be constructed using \code{\link[survival:Surv]{survival::Surv}} or \code{\link[glmnet:stratifySurv]{glmnet::stratifySurv}} internally.}
+
 \item{causes}{(Unused for now) Integer vector indicating causes, e.g. \code{1:2} for two causes.}
 
 \item{strata}{\verb{[NULL]} Quoted name of a stratification variable.
@@ -56,7 +64,7 @@ Passed to \link[glmnet:stratifySurv]{glmnet::stratifySurv} as \code{strata = dat
 
 \item{mt_max_iter}{\verb{[5]} number of mt-iterations to perform. Will break early
 if no change in per-cause beta vector between iterations is detected.
-If set to \code{0}, no \code{fwelnet} iteration will be performed and the returned
+If set to \code{0}, no \code{cv.fwelnet} iteration will be performed and the returned
 coefficients will be the result of fitting a cause-specific \code{glmnet}.}
 
 \item{z_method}{\code{("original")} Either assign \code{z1} to be informed by \code{beta2}
@@ -90,7 +98,8 @@ components \code{beta1} and \code{beta2}, matrices of dimensions \code{p} x \cod
 containing coefficient vectors for causes 1 and 2 for each multi-task iteration,
 with the first column corresponding to the original \code{cv.glmnet} solution.}
 
-\item{epsilon1, epsilon2}{RMSE between beta1 and beta2 values of consecutive iterations to consider equal to stop the algorithm.
+\item{epsilon1, epsilon2}{RMSE between beta1 and beta2 values of consecutive iterations to
+consider equal to stop the algorithm.
 Defaults to \code{sqrt(.Machine$double.eps)}, roughly 1.5e-08 on conventional machines.}
 
 \item{...}{Passed to \code{\link[=fwelnet]{fwelnet()}}}

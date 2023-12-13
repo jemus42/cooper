@@ -1,5 +1,4 @@
 
-
 test_that("low dim fitting", {
   set.seed(1)
   train <- getpbc(500)
@@ -86,4 +85,40 @@ test_that("various sanity checks", {
   train <- getpbc(500)
   expect_error(cooper(train, standardize = TRUE, nfolds = 2))
   expect_warning(expect_error(cooper(train, standardize = TRUE, nfolds = 4, mt_max_iter = 1)))
+})
+
+
+test_that("low dim fitting with different variable names", {
+  set.seed(1)
+  train <- getpbc(300)
+
+  set.seed(3)
+  fit0 <- cooper(
+    train,
+    standardize = TRUE, 
+    nfolds = 3, 
+    stratify_by_status = TRUE, 
+    mt_max_iter = 3
+  )
+  
+  train$othertime <- train$time
+  train$time <- NULL
+  
+  train$event <- train$status
+  train$status <- NULL
+  
+  set.seed(3)
+  fit <- cooper(
+    train, time = "othertime", status = "event",
+    standardize = TRUE, 
+    nfolds = 3, 
+    stratify_by_status = TRUE, 
+    mt_max_iter = 3
+  )
+  
+  # Default should be equivalent, no change in estimated coefs or anything
+  expect_equal(fit0, fit)
+  
+  
+  
 })

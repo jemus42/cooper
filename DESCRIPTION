@@ -1,7 +1,7 @@
 Type: Package
 Package: cooper
 Title: Cooperative Penalized Regression
-Version: 0.1.0.9008
+Version: 0.1.0.9009
 Authors@R: c(
     person("Lukas", "Burk", , "burk@leibniz-bips.de", role = c("aut", "cre"),
                comment = c(ORCID = "0000-0001-7528-3795")),

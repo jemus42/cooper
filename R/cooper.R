@@ -5,12 +5,15 @@
 #'
 #' @param data A data.frame or matrix holding predictors and outcome,
 #' with outcome variables assumed to be named `"time"` and `"status"`.
+#' @param time,status `("time", "status")` Quoted names of time and status indicator variables, respectively.
+#'  Assumes `status` is encodes as `0`: censored, `1`:event 1, `2`: event 2.
+#'  Outcome will be constructed using [`survival::Surv`] or [`glmnet::stratifySurv`] internally.
 #' @param causes (Unused for now) Integer vector indicating causes, e.g. `1:2` for two causes.
 #' @param strata `[NULL]` Quoted name of a stratification variable.
 #'   Passed to [glmnet::stratifySurv] as `strata = data[[strata]]`.
 #' @param mt_max_iter `[5]` number of mt-iterations to perform. Will break early
 #' if no change in per-cause beta vector between iterations is detected.
-#' If set to `0`, no `fwelnet` iteration will be performed and the returned
+#' If set to `0`, no `cv.fwelnet` iteration will be performed and the returned
 #' coefficients will be the result of fitting a cause-specific `glmnet`.
 #' @param z_method `("original")` Either assign `z1` to be informed by `beta2`
 #' of the current iteration (default behavior, as described in Algorithm 2
@@ -27,7 +30,8 @@
 #'   components `beta1` and `beta2`, matrices of dimensions `p` x `mt_iter_max + 1`
 #'   containing coefficient vectors for causes 1 and 2 for each multi-task iteration,
 #'   with the first column corresponding to the original `cv.glmnet` solution.
-#' @param epsilon1,epsilon2 RMSE between beta1 and beta2 values of consecutive iterations to consider equal to stop the algorithm.
+#' @param epsilon1,epsilon2 RMSE between beta1 and beta2 values of consecutive iterations to 
+#'   consider equal to stop the algorithm.
 #'   Defaults to `sqrt(.Machine$double.eps)`, roughly 1.5e-08 on conventional machines.
 #' @param ... Passed to [`fwelnet()`]
 #' @inheritParams fwelnet
@@ -51,6 +55,7 @@
 #' )
 #' 
 cooper <- function(data, 
+                   time = "time", status = "status",
                    causes = 1:2, # Mostly unused for now
                    strata = NULL,
                    mt_max_iter = 5,
@@ -65,16 +70,17 @@ cooper <- function(data,
                    epsilon1 = sqrt(.Machine$double.eps),
                    epsilon2 = epsilon1,
                    ...) {
-  
+  # browser()
   # Convert to data.frame just in case it's a data.table
   data <- as.data.frame(data)
   assert_data_frame(data, any.missing = FALSE)
+  assert_subset(time, choices = names(data))
+  assert_subset(status, choices = names(data))
   assert_integer(causes, any.missing = FALSE, min.len = 2)
   assert_int(mt_max_iter, lower = 1)
   assert_choice(z_method, choices = c("original", "aligned"))
   assert_numeric(alpha, any.missing = FALSE, lower = 0, upper = 1, len = 1)
   assert_logical(verbose, len = 1)
-  # FIXME: Rename t variable to avoid clash with base::t
   assert_numeric(t, any.missing = FALSE, len = 1)
   assert_numeric(alpha, any.missing = FALSE, lower = 0, upper = 1, len = 1)
   assert_numeric(thresh, any.missing = FALSE, lower = 0, len = 1)
@@ -89,12 +95,12 @@ cooper <- function(data,
   rowidx <- list()
   for (i in causes) {
     # hold row ids for events of each cause
-    rowidx[[i]] <- which(data$status == i)
+    rowidx[[i]] <- which(data[[status]] == i)
   }
 
   # Slow copy of data :(
-  status_c1 <- data$status
-  status_c2 <- data$status
+  status_c1 <- data[[status]]
+  status_c2 <- data[[status]]
 
   # Set events of cause 2 to censored for cause 1 dataset and vice versa
   status_c1[rowidx[[2]]] <- 0
@@ -103,7 +109,7 @@ cooper <- function(data,
   status_c2[rowidx[[2]]] <- 1
 
   # Sanity check ----
-  orig_status <- table(data$status)
+  orig_status <- table(data[[status]])
 
   # Events check out
   stopifnot(orig_status[["1"]] == table(status_c1)[["1"]])
@@ -111,8 +117,8 @@ cooper <- function(data,
   
   # time is shared between causes
   y_list <- list(
-    survival::Surv(data$time, event = status_c1),
-    survival::Surv(data$time, event = status_c2)
+    survival::Surv(data[[time]], event = status_c1),
+    survival::Surv(data[[time]], event = status_c2)
   )
   
   if (!is.null(strata)) {
@@ -126,7 +132,7 @@ cooper <- function(data,
   }
 
   # Predictor matrix shared for all causes
-  X <- data[, -(which(colnames(data) %in% c("time", "status"))), drop = FALSE]
+  X <- data[, -(which(colnames(data) %in% c(time, status))), drop = FALSE]
   # Treatment-encode factors, ensure numeric design matrix without intercept
   X <- model.matrix(~ ., X)
   # Dropping intercept also drops attributes, not sure of this is a problem
@@ -186,7 +192,8 @@ cooper <- function(data,
     z2 <- abs(beta1[, k, drop = FALSE])
 
     # Get betas from fwelnet fit, requires finding lambda.min via cv first
-    fw_cv_list[[2]] <- cv.fwelnet(X, y_list[[2]], z2, family = "cox", alpha = alpha, t = t, a = a, thresh = thresh, foldid = y2foldids, standardize = standardize, ...)
+    fw_cv_list[[2]] <- cv.fwelnet(X, y_list[[2]], z2, family = "cox", alpha = alpha, t = t, a = a, 
+                                  thresh = thresh, foldid = y2foldids, standardize = standardize, ...)
     beta2[, k + 1] <- fw_cv_list[[2]]$glmfit$beta[, which(fw_cv_list[[2]]$lambda == fw_cv_list[[2]]$lambda.min)]
 
     # Alg step 2b)
@@ -196,7 +203,8 @@ cooper <- function(data,
       stop("z_method ", z_method, " not known")
     )
 
-    fw_cv_list[[1]] <- cv.fwelnet(X, y_list[[1]], z1, family = "cox", alpha = alpha, t = t, a = a, thresh = thresh, foldid = y1foldids, standardize = standardize, ...)
+    fw_cv_list[[1]] <- cv.fwelnet(X, y_list[[1]], z1, family = "cox", alpha = alpha, t = t, a = a, 
+                                  thresh = thresh, foldid = y1foldids, standardize = standardize, ...)
     beta1[, k + 1] <- fw_cv_list[[1]]$glmfit$beta[, which(fw_cv_list[[1]]$lambda == fw_cv_list[[1]]$lambda.min)]
 
     # Check beta differences, break if differences "small enough" I guess
@@ -244,7 +252,7 @@ cooper <- function(data,
     fwelfits = fw_cv_list,
     # model matrix
     x = X, y = y_list,
-    predictors = setdiff(colnames(data), c("time", "status")),
+    predictors = setdiff(colnames(data), c(time, status)),
     # Check mt iterations later to assess reasonable values
     mt_iter = k - 1, # Adjust since k can't start at 0
     mt_max_iter = mt_max_iter,
