@@ -1,6 +1,8 @@
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# Cooperative Penalized Regression (CooPeR) ⚠️ Fork Notice ⚠️
+# Cooperative Penalized Regression (CooPeR)
+
+⚠️ Fork Notice ⚠️
 
 This repository is a fork of the original [`fwelnet` implementation by
 Tay et al](https://github.com/kjytay/fwelnet).  
