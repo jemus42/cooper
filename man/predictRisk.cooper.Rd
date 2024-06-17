@@ -4,7 +4,7 @@
 \alias{predictRisk.cooper}
 \title{predictRisk for Cooper models}
 \usage{
-predictRisk.cooper(object, newdata, times, cause, use_initial_fit = FALSE, ...)
+\method{predictRisk}{cooper}(object, newdata, times, cause, use_initial_fit = FALSE, ...)
 }
 \arguments{
 \item{object}{Object of class \code{cooper}, containing two cause-specific Cox model fits.}
