@@ -1,4 +1,4 @@
-#' @aliases fwelnet-package
+#' @aliases cooper-package
 #' @keywords internal
 "_PACKAGE"
 
@@ -13,5 +13,6 @@
 #' @importFrom data.table .NGRP
 #' @importFrom data.table .SD
 #' @importFrom data.table data.table
+#' @importFrom survival Surv
 ## usethis namespace: end
 NULL
