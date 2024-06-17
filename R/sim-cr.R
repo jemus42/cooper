@@ -73,6 +73,7 @@ sim_cr_coxexp <- function(n = 100, p = 4, beta1 = runif(p, -1, 1), beta2 = beta1
   )
 }
 
+#' @export
 print.sim_cr <- function(x, ...) {
   cat(sprintf("Simulated dataset with N = %d and p = %d\n", nrow(x$Xmat), ncol(x$Xmat)))
   cat("beta1:", sprintf("%.3f", x$beta1), "\n")

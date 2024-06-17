@@ -3,7 +3,6 @@
 \docType{package}
 \name{cooper-package}
 \alias{cooper-package}
-\alias{_PACKAGE}
 \alias{fwelnet-package}
 \title{cooper: Cooperative Penalized Regression}
 \description{
