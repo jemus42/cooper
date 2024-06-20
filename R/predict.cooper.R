@@ -125,8 +125,10 @@ get_abs_risk <- function(object, xnew, event, horizon, use_initial_fit = FALSE) 
   marginal_surv <- apply(marginal_chazard, 2, \(H) exp(-H))
   #marginal_surv <- exp(-marginal_chazard)
   # (exp(eta) * h0(t)) * S(t)  -> he(t) * S(t)
-  #abs_risk <- as.vector(risks * as.vector(base_haz) * marginal_surv)
-  abs_risk <- as.vector(risks * base_haz %*% marginal_surv)
+
+  #  abs_risk <- as.vector(risks * base_haz %*% marginal_surv)
+  
+  abs_risk <- risks * as.vector(base_haz %*% marginal_surv)
   
   data.frame(
     id = seq_along(abs_risk),
