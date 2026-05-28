@@ -156,9 +156,10 @@ fwelnet <- function(x, y, z, lambda = NULL, family = c("gaussian", "binomial", "
     # come up with lambda values: use the lambda sequence from glmnet
     if (is.null(lambda)) {
     # If x has constant variables, standardization produces NaNs which look like misisng value error in this step
+     # cox.ties pins the glmnet 5.0 default (ignored for non-cox families); see cooper().
      glmfit <- glmnet::glmnet(x, y,
        alpha = alpha, family = family,
-       standardize = FALSE
+       standardize = FALSE, cox.ties = "breslow"
      )
      lambda <- glmfit$lambda
    } else {
@@ -166,7 +167,7 @@ fwelnet <- function(x, y, z, lambda = NULL, family = c("gaussian", "binomial", "
      lambda <- as.double(rev(sort(lambda)))
      glmfit <- glmnet::glmnet(x, y,
        alpha = alpha, family = family,
-       standardize = FALSE, lambda = lambda
+       standardize = FALSE, lambda = lambda, cox.ties = "breslow"
      )
    }
 
@@ -265,7 +266,7 @@ fwelnet <- function(x, y, z, lambda = NULL, family = c("gaussian", "binomial", "
         pen.weights <- weight_fun(z, theta)
         fit <- glmnet::glmnet(x, y, family = family, standardize = FALSE,
                               alpha = alpha, lambda = lambda * mean(pen.weights),
-                              penalty.factor = pen.weights)
+                              penalty.factor = pen.weights, cox.ties = "breslow")
         beta <- matrix(fit$beta, nrow = p)
         a0 <- fit$a0
         

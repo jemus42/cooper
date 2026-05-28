@@ -157,7 +157,8 @@ cv.fwelnet <- function(x, y, z, family = c("gaussian", "binomial", "cox"), lambd
         fits[[ii]]$nll <- glmnet::coxnet.deviance(
           x = x[oo, , drop = F],
           y = y[oo, , drop = F],
-          beta = fits[[ii]]$beta
+          beta = fits[[ii]]$beta,
+          cox.ties = "breslow"  # lock glmnet 5.0 default (see cooper())
         )
       }
     }
