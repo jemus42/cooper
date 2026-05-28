@@ -10,8 +10,12 @@ baseline_hazard <- function(object, event = 1, use_initial_fit = FALSE, times = 
     model_fit <- object$initial_fits[[event]]
     lambda_min <- model_fit$lambda.min
   } else {
-    model_fit <- object$fwelfits[[event]]$glmfit$glmfit
-    lambda_min <- object$fwelfits[[event]]$lambda.min
+    cvfit <- object$fwelfits[[event]]
+    model_fit <- cvfit$glmfit$glmfit
+    # survfit() looks up `s` on the internal glmnet's lambda grid, which fwelnet() scales
+    # by mean(pen.weights); map the nominal lambda.min onto that grid so the hazard uses
+    # the same coefficients as predict()'s linear predictor (else they diverge as theta grows).
+    lambda_min <- model_fit$lambda[which(cvfit$lambda == cvfit$lambda.min)]
   }
   
   
@@ -48,8 +52,12 @@ cumulative_hazard <- function(object, xnew, event = 1, times = NULL, use_initial
     lambda_min <- model_fit$lambda.min
   } else {
     # glmnet fit object within fwelnet object within cv.fwelnet object
-    model_fit <- object$fwelfits[[event]]$glmfit$glmfit
-    lambda_min <- object$fwelfits[[event]]$lambda.min
+    cvfit <- object$fwelfits[[event]]
+    model_fit <- cvfit$glmfit$glmfit
+    # survfit() looks up `s` on the internal glmnet's lambda grid, which fwelnet() scales
+    # by mean(pen.weights); map the nominal lambda.min onto that grid so the hazard uses
+    # the same coefficients as predict()'s linear predictor (else they diverge as theta grows).
+    lambda_min <- model_fit$lambda[which(cvfit$lambda == cvfit$lambda.min)]
   }
   # browser()
   bfit <- survival::survfit(
