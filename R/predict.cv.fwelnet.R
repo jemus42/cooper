@@ -36,12 +36,16 @@
 #'
 #' @importFrom stats predict
 #' @export
-predict.cv.fwelnet <- function(object, xnew, s = c("lambda.1se", "lambda.min"),
-                               ...) {
-    s <- match.arg(s)
-    lambda <- object[[s]]
-    idx <- which(object$lambda == lambda)
+predict.cv.fwelnet <- function(
+  object,
+  xnew,
+  s = c("lambda.1se", "lambda.min"),
+  ...
+) {
+  s <- match.arg(s)
+  lambda <- object[[s]]
+  idx <- which(object$lambda == lambda)
 
-    predictions <- predict(object$glmfit, xnew, ...)
-    return(predictions[, idx, drop = FALSE])
+  predictions <- predict(object$glmfit, xnew, ...)
+  return(predictions[, idx, drop = FALSE])
 }

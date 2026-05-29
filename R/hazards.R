@@ -1,6 +1,10 @@
-
-cumulative_hazard <- function(object, xnew, event = 1, times = NULL, use_initial_fit = FALSE) {
-  
+cumulative_hazard <- function(
+  object,
+  xnew,
+  event = 1,
+  times = NULL,
+  use_initial_fit = FALSE
+) {
   if (use_initial_fit) {
     # cv.glmnet object with lambda.min
     model_fit <- object$initial_fits[[event]]
@@ -16,15 +20,18 @@ cumulative_hazard <- function(object, xnew, event = 1, times = NULL, use_initial
   }
   # browser()
   bfit <- survival::survfit(
-    model_fit, 
+    model_fit,
     x = object$x,
     y = object$y[[event]],
-    newx = x_modelmat(object, xnew), s = lambda_min
+    newx = x_modelmat(object, xnew),
+    s = lambda_min
   )
 
   # survfit() drops cumhaz to a vector for a single observation; keep it times x obs
   ret <- bfit$cumhaz
-  if (is.null(dim(ret))) ret <- matrix(ret, ncol = 1)
+  if (is.null(dim(ret))) {
+    ret <- matrix(ret, ncol = 1)
+  }
 
   if (!is.null(times)) {
     # Make sure to subset by [rows, columns, drop = FALSE]
@@ -32,6 +39,6 @@ cumulative_hazard <- function(object, xnew, event = 1, times = NULL, use_initial
     # Ask me how I know
     ret <- ret[which(bfit$time %in% times), , drop = FALSE]
   }
-  
+
   ret
 }

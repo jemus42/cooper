@@ -21,7 +21,7 @@
 #' by `beta2` and `beta1` from the previous iteration step respectively.
 #' @param alpha `(1)` Passed to [`glmnet()`] and [`fwelnet()`].
 #' @param stratify_by_status (`FALSE`) If `TRUE`, the internal cross-validation folds are sampled by the `status`
-#'  variable, leading to folds with roughly equal proportions of events as in `data`.  
+#'  variable, leading to folds with roughly equal proportions of events as in `data`.
 #'  This is helpful in cases where many censored observations in folds lead to errors during model fits.
 #' @param standardize Passed to [`cv.fwelnet`] and [`cv.glmnet`] respectively.
 #' @param verbose Display informative message on the state of the mt fit.
@@ -30,7 +30,7 @@
 #'   components `beta1` and `beta2`, matrices of dimensions `p` x `mt_iter_max + 1`
 #'   containing coefficient vectors for causes 1 and 2 for each multi-task iteration,
 #'   with the first column corresponding to the original `cv.glmnet` solution.
-#' @param epsilon1,epsilon2 RMSE between beta1 and beta2 values of consecutive iterations to 
+#' @param epsilon1,epsilon2 RMSE between beta1 and beta2 values of consecutive iterations to
 #'   consider equal to stop the algorithm.
 #'   Defaults to `sqrt(.Machine$double.eps)`, roughly 1.5e-08 on conventional machines.
 #' @param ... Passed to [`fwelnet()`]
@@ -47,29 +47,34 @@
 #' data(pbc, package = "survival")
 #' pbc <- na.omit(pbc)
 #' xtrain <- pbc[1:270, -1]
-#' 
+#'
 #' set.seed(12)
 #' cooperfit <- cooper(
 #'   xtrain, mt_max_iter = 3,
 #'   stratify_by_status = TRUE
 #' )
-#' 
-cooper <- function(data, 
-                   time = "time", status = "status",
-                   causes = 1:2, # Mostly unused for now
-                   strata = NULL,
-                   mt_max_iter = 3,
-                   z_method = "original",
-                   stratify_by_status = FALSE,
-                   alpha = 1, # pass to glmnet and fwelnet
-                   standardize = TRUE,
-                   verbose = FALSE, t = 50, a = 0.5, 
-                   thresh = 1e-5,
-                   nfolds = 10,
-                   include_mt_beta_history = FALSE,
-                   epsilon1 = sqrt(.Machine$double.eps),
-                   epsilon2 = epsilon1,
-                   ...) {
+#'
+cooper <- function(
+  data,
+  time = "time",
+  status = "status",
+  causes = 1:2, # Mostly unused for now
+  strata = NULL,
+  mt_max_iter = 3,
+  z_method = "original",
+  stratify_by_status = FALSE,
+  alpha = 1, # pass to glmnet and fwelnet
+  standardize = TRUE,
+  verbose = FALSE,
+  t = 50,
+  a = 0.5,
+  thresh = 1e-5,
+  nfolds = 10,
+  include_mt_beta_history = FALSE,
+  epsilon1 = sqrt(.Machine$double.eps),
+  epsilon2 = epsilon1,
+  ...
+) {
   # browser()
   # Convert to data.frame just in case it's a data.table
   data <- as.data.frame(data)
@@ -114,19 +119,21 @@ cooper <- function(data,
   # Events check out
   stopifnot(orig_status[["1"]] == table(status_c1)[["1"]])
   stopifnot(orig_status[["2"]] == table(status_c2)[["1"]])
-  
+
   # time is shared between causes
   y_list <- list(
     survival::Surv(data[[time]], event = status_c1),
     survival::Surv(data[[time]], event = status_c2)
   )
-  
+
   if (!is.null(strata)) {
     checkmate::assert_subset(strata, choices = colnames(data))
-    
+
     # Modify y to add the stratification attribute
-    y_list <- lapply(y_list, \(x) glmnet::stratifySurv(x, strata = data[[strata]]))
-    
+    y_list <- lapply(y_list, \(x) {
+      glmnet::stratifySurv(x, strata = data[[strata]])
+    })
+
     # Remove stratification variable from feature matrix
     data <- data[, -(which(colnames(data) == strata)), drop = FALSE]
   }
@@ -134,20 +141,19 @@ cooper <- function(data,
   # Predictor matrix shared for all causes
   X <- data[, -(which(colnames(data) %in% c(time, status))), drop = FALSE]
   # Treatment-encode factors, ensure numeric design matrix without intercept
-  X <- model.matrix(~ ., X)
+  X <- model.matrix(~., X)
   # Dropping intercept also drops attributes, not sure of this is a problem
-  X <- X[, -1, drop = FALSE] 
-
+  X <- X[, -1, drop = FALSE]
 
   # Stratify by status, generating per-observation fold IDs and passing those to initial
   # cv.glmnet and cv.fwelnet later on
   y1foldids <- NULL
   y2foldids <- NULL
-  
+
   if (stratify_by_status) {
     y1df <- data.frame(status = status_c1)
     y2df <- data.frame(status = status_c2)
-    
+
     y1foldids <- stratified_cv_folds(y1df, nfolds = nfolds)[["fold"]]
     y2foldids <- stratified_cv_folds(y2df, nfolds = nfolds)[["fold"]]
   }
@@ -158,15 +164,36 @@ cooper <- function(data,
   # for y_1, y_2 respectively
   # cox.ties = "breslow" locks the glmnet 5.0 default; 5.1 switches to "efron", which would
   # silently change the published results (and otherwise emits a deprecation warning per fit).
-  gl1 <- glmnet::cv.glmnet(X, y_list[[1]], family = "cox", alpha = alpha, foldid = y1foldids, standardize = standardize, cox.ties = "breslow")
-  gl2 <- glmnet::cv.glmnet(X, y_list[[2]], family = "cox", alpha = alpha, foldid = y2foldids, standardize = standardize, cox.ties = "breslow")
+  gl1 <- glmnet::cv.glmnet(
+    X,
+    y_list[[1]],
+    family = "cox",
+    alpha = alpha,
+    foldid = y1foldids,
+    standardize = standardize,
+    cox.ties = "breslow"
+  )
+  gl2 <- glmnet::cv.glmnet(
+    X,
+    y_list[[2]],
+    family = "cox",
+    alpha = alpha,
+    foldid = y2foldids,
+    standardize = standardize,
+    cox.ties = "breslow"
+  )
 
   b1_0 <- gl1$glmnet.fit$beta[, which(gl1$lambda == gl1$lambda.min)]
   b2_0 <- gl2$glmnet.fit$beta[, which(gl2$lambda == gl2$lambda.min)]
 
   # Hold betas in matrix, columns = iter+1, rows = p
   # beta1[j, k] holds cause-1 beta_j at iteration k+1 with k = 1 being glmnet solution
-  beta1 <- matrix(NA_real_, ncol = mt_max_iter + 1, nrow = ncol(X), dimnames = list(dimnames(X)[[2]]))
+  beta1 <- matrix(
+    NA_real_,
+    ncol = mt_max_iter + 1,
+    nrow = ncol(X),
+    dimnames = list(dimnames(X)[[2]])
+  )
   beta2 <- beta1
 
   # Initialize first col with glmnet fit
@@ -176,13 +203,14 @@ cooper <- function(data,
   # Alg step 2) init k = 0, while k < mt_max_iter:
   # go from 1 to max_iter+1 so we're doing max_iter steps and 1 can be 0.
   k <- 1
-  
-  while (k < mt_max_iter + 1) {
 
-    if (verbose) message("k = ", k)
-    
+  while (k < mt_max_iter + 1) {
+    if (verbose) {
+      message("k = ", k)
+    }
+
     fw_cv_list <- vector(mode = "list", length = 2)
-    
+
     # Stratify by status, generating per-observation fold IDs and passing those cv.fwelnet fits
     # using different fold assignments for each iteration, maybe should assign folds once initially and reuse here?
     if (stratify_by_status) {
@@ -194,25 +222,52 @@ cooper <- function(data,
     z2 <- abs(beta1[, k, drop = FALSE])
 
     # Get betas from fwelnet fit, requires finding lambda.min via cv first
-    fw_cv_list[[2]] <- cv.fwelnet(X, y_list[[2]], z2, family = "cox", alpha = alpha, t = t, a = a, 
-                                  thresh = thresh, foldid = y2foldids, standardize = standardize, ...)
-    beta2[, k + 1] <- fw_cv_list[[2]]$glmfit$beta[, which(fw_cv_list[[2]]$lambda == fw_cv_list[[2]]$lambda.min)]
+    fw_cv_list[[2]] <- cv.fwelnet(
+      X,
+      y_list[[2]],
+      z2,
+      family = "cox",
+      alpha = alpha,
+      t = t,
+      a = a,
+      thresh = thresh,
+      foldid = y2foldids,
+      standardize = standardize,
+      ...
+    )
+    beta2[, k + 1] <- fw_cv_list[[2]]$glmfit$beta[, which(
+      fw_cv_list[[2]]$lambda == fw_cv_list[[2]]$lambda.min
+    )]
 
     # Alg step 2b)
-    z1 <- switch (z_method,
+    z1 <- switch(
+      z_method,
       "original" = abs(beta2[, k + 1, drop = FALSE]),
-      "aligned"  = abs(beta2[, k, drop = FALSE]),
+      "aligned" = abs(beta2[, k, drop = FALSE]),
       stop("z_method ", z_method, " not known")
     )
 
-    fw_cv_list[[1]] <- cv.fwelnet(X, y_list[[1]], z1, family = "cox", alpha = alpha, t = t, a = a, 
-                                  thresh = thresh, foldid = y1foldids, standardize = standardize, ...)
-    beta1[, k + 1] <- fw_cv_list[[1]]$glmfit$beta[, which(fw_cv_list[[1]]$lambda == fw_cv_list[[1]]$lambda.min)]
+    fw_cv_list[[1]] <- cv.fwelnet(
+      X,
+      y_list[[1]],
+      z1,
+      family = "cox",
+      alpha = alpha,
+      t = t,
+      a = a,
+      thresh = thresh,
+      foldid = y1foldids,
+      standardize = standardize,
+      ...
+    )
+    beta1[, k + 1] <- fw_cv_list[[1]]$glmfit$beta[, which(
+      fw_cv_list[[1]]$lambda == fw_cv_list[[1]]$lambda.min
+    )]
 
     # Check beta differences, break if differences "small enough" I guess
     beta1_diff <- beta1[, k] - beta1[, k + 1]
     beta2_diff <- beta2[, k] - beta2[, k + 1]
-    
+
     # rmse kind of?
     beta1_eps <- sqrt(mean(beta1_diff^2))
     beta2_eps <- sqrt(mean(beta2_diff^2))
@@ -222,25 +277,43 @@ cooper <- function(data,
     beta2_stagnant <- isTRUE(beta2_eps < epsilon2)
 
     if (beta1_stagnant) {
-      if (verbose) message("No change in beta1 at k = ", k, ": rmse(beta1_k, beta1_k+1) = ", beta1_eps)
+      if (verbose) {
+        message(
+          "No change in beta1 at k = ",
+          k,
+          ": rmse(beta1_k, beta1_k+1) = ",
+          beta1_eps
+        )
+      }
       break
     }
     if (beta2_stagnant) {
-      if (verbose) message("No change in beta2 at k = ", k, ": rmse(beta2_k, beta2_k+1) = ", beta2_eps)
+      if (verbose) {
+        message(
+          "No change in beta2 at k = ",
+          k,
+          ": rmse(beta2_k, beta2_k+1) = ",
+          beta2_eps
+        )
+      }
       break
     }
 
-    if (beta1_stagnant | beta2_stagnant) break
+    if (beta1_stagnant | beta2_stagnant) {
+      break
+    }
 
     # Increment k at the very last step
     k <- k + 1
   }
-  
+
   if (verbose & k == 2 & mt_max_iter > 2) {
-    message(paste("Algorithm stopped at k = 2, indicating no meaningful change in coefficient estimates compared to",
-                  "cause-specific glmnet (k = 1)"))
+    message(paste(
+      "Algorithm stopped at k = 2, indicating no meaningful change in coefficient estimates compared to",
+      "cause-specific glmnet (k = 1)"
+    ))
   }
-  
+
   # Returns betas and anything else that might be interesting
   ret <- list(
     # final fwelnet fit objects for later predictions
@@ -253,7 +326,8 @@ cooper <- function(data,
     initial_fits = list(gl1, gl2),
     fwelfits = fw_cv_list,
     # model matrix
-    x = X, y = y_list,
+    x = X,
+    y = y_list,
     predictors = setdiff(colnames(data), c(time, status)),
     # Check mt iterations later to assess reasonable values
     mt_iter = k - 1, # Adjust since k can't start at 0
@@ -261,13 +335,13 @@ cooper <- function(data,
     converged = ((k - 1) < mt_max_iter),
     beta_eps = c(beta1 = beta1_eps, beta2 = beta2_eps)
   )
-  
+
   if (include_mt_beta_history) {
     #  History of betas
     ret$beta1 <- beta1
     ret$beta2 <- beta2
   }
-  
+
   class(ret) <- c("cooper")
   ret
 }
@@ -278,13 +352,18 @@ cooper <- function(data,
 fwelnet_mt_cox <- cooper
 
 
-
 beta_to_df <- function(beta) {
   iteration <- NULL # global var
 
   colnames(beta) <- seq_len(ncol(beta))
   beta <- data.table::data.table(x = rownames(beta), beta)
-  beta <- data.table::melt(beta, id.vars = "x", variable.name = "iteration", variable.factor = FALSE, value.name = "coef")
+  beta <- data.table::melt(
+    beta,
+    id.vars = "x",
+    variable.name = "iteration",
+    variable.factor = FALSE,
+    value.name = "coef"
+  )
   beta[, iteration := as.integer(iteration)]
   beta
 }
@@ -299,9 +378,11 @@ extract_beta_history <- function(object) {
   event <- NULL # global var
   checkmate::assert_class(object, "cooper")
   if (!("beta1" %in% names(object))) {
-    stop("Object does not contain beta history. Fit models using `include_mt_beta_history` = TRUE")
+    stop(
+      "Object does not contain beta history. Fit models using `include_mt_beta_history` = TRUE"
+    )
   }
-  
+
   rbind(
     beta_to_df(object$beta1)[, event := 1],
     beta_to_df(object$beta2)[, event := 2]

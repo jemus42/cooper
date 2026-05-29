@@ -37,35 +37,39 @@
 #'
 #' @export
 #' @importFrom stats model.matrix coef
-predict.fwelnet <- function(object, xnew, type = c("link", "response", "coefficients"),
-                            ...) {
-    type <- match.arg(type)
+predict.fwelnet <- function(
+  object,
+  xnew,
+  type = c("link", "response", "coefficients"),
+  ...
+) {
+  type <- match.arg(type)
 
-    # Allow data.frame/categorical input for survival without intercept
-    if (is.data.frame(xnew)) {
-      if (object$family == "cox") {
-        xnew <- model.matrix(~ ., xnew)[, -1, drop = FALSE]
-      } else {
-        xnew <- model.matrix(~ ., xnew)
-      }
-    }
-
-    # Coefs only as glmnet does, no lambda interpolation for now
-    if (type == "coefficients") {
-      out <- object$beta
-      return(out)
-    }
-
+  # Allow data.frame/categorical input for survival without intercept
+  if (is.data.frame(xnew)) {
     if (object$family == "cox") {
-        # a0 is numeric(0) or NULL for family = "cox"
-        out <- xnew %*% object$beta
+      xnew <- model.matrix(~., xnew)[, -1, drop = FALSE]
     } else {
-        out <- t(object$a0 + t(xnew %*% object$beta))
+      xnew <- model.matrix(~., xnew)
     }
+  }
 
-    if (type == "response" && object$family == "binomial") {
-        out <- 1 / (1 + exp(-out))
-    }
-
+  # Coefs only as glmnet does, no lambda interpolation for now
+  if (type == "coefficients") {
+    out <- object$beta
     return(out)
+  }
+
+  if (object$family == "cox") {
+    # a0 is numeric(0) or NULL for family = "cox"
+    out <- xnew %*% object$beta
+  } else {
+    out <- t(object$a0 + t(xnew %*% object$beta))
+  }
+
+  if (type == "response" && object$family == "binomial") {
+    out <- 1 / (1 + exp(-out))
+  }
+
+  return(out)
 }

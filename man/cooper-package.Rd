@@ -12,6 +12,7 @@ A method for fitting cause-specific penalized Cox regression models based on the
 
 Authors:
 \itemize{
+  \item Lukas Burk \email{burk@leibniz-bips.de} (\href{https://orcid.org/0000-0001-7528-3795}{ORCID})
   \item Kenneth Tay \email{kjytay@stanford.edu}
   \item Robert Tibshirani
 }

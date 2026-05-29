@@ -30,26 +30,41 @@
 #' @importFrom graphics points axis abline
 #' @export
 plot.cv.fwelnet <- function(x, sign.lambda = 1, ...) {
-    xlab <- "log(Lambda)"
-    if (sign.lambda < 0) {
-        xlab = paste("-", xlab, sep = "")
-    }
-    plot.args <- list(x = sign.lambda * log(x$lambda), y = x$cvm,
-                      ylim = range(x$cvup, x$cvlo),
-                      xlab = xlab, ylab = x$name, type = "n")
-    new.args <- list(...)
-    if (length(new.args)) {
-        plot.args[names(new.args)] = new.args
-    }
-    do.call("plot", plot.args)
-    error.bars(sign.lambda * log(x$lambda), x$cvup, x$cvlo,
-               width = 0.01, col = "darkgrey")
-    points(sign.lambda * log(x$lambda), x$cvm, pch = 20, col = "red")
+  xlab <- "log(Lambda)"
+  if (sign.lambda < 0) {
+    xlab = paste("-", xlab, sep = "")
+  }
+  plot.args <- list(
+    x = sign.lambda * log(x$lambda),
+    y = x$cvm,
+    ylim = range(x$cvup, x$cvlo),
+    xlab = xlab,
+    ylab = x$name,
+    type = "n"
+  )
+  new.args <- list(...)
+  if (length(new.args)) {
+    plot.args[names(new.args)] = new.args
+  }
+  do.call("plot", plot.args)
+  error.bars(
+    sign.lambda * log(x$lambda),
+    x$cvup,
+    x$cvlo,
+    width = 0.01,
+    col = "darkgrey"
+  )
+  points(sign.lambda * log(x$lambda), x$cvm, pch = 20, col = "red")
 
-    axis(side = 3, at = sign.lambda * log(x$lambda), labels = paste(x$nzero),
-         tick = FALSE, line = 0)
+  axis(
+    side = 3,
+    at = sign.lambda * log(x$lambda),
+    labels = paste(x$nzero),
+    tick = FALSE,
+    line = 0
+  )
 
-    abline(v = sign.lambda * log(x$lambda.min), lty = 3)
-    abline(v = sign.lambda * log(x$lambda.1se), lty = 3)
-    invisible()
+  abline(v = sign.lambda * log(x$lambda.min), lty = 3)
+  abline(v = sign.lambda * log(x$lambda.1se), lty = 3)
+  invisible()
 }

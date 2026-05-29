@@ -10,7 +10,7 @@ extract_beta_history(object)
 \item{object}{Object of class \code{"cooper"}, see \code{\link[=cooper]{cooper()}}.}
 }
 \value{
-A \link{data.table}.
+A \link[data.table:data.table]{data.table}.
 }
 \description{
 Extract beta coefficients across cooper iterations

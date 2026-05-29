@@ -14,73 +14,91 @@
 #' @export
 #'
 #' @examples
-#' 
+#'
 #' data(pbc, package = "survival")
 #' pbc <- na.omit(pbc)
 #' xtrain <- pbc[1:270, -1]
 #' xtest <- pbc[270:276, -1]
-#' 
+#'
 #' set.seed(12)
 #' cooperfit <- cooper(
 #'   xtrain, mt_max_iter = 3,
 #'   stratify_by_status = TRUE
 #' )
-#' 
+#'
 #' predict(cooperfit, xnew = xtest, type = "risk", event = 1)
 #' predict(cooperfit, xnew = xtest, times = c(1180.5, 1788), type = "absrisk", event = 1)
 predict.cooper <- function(
-    object, xnew, 
-    type = c("absrisk", "risk"), 
-    event = 1,
-    times = NULL,
-    use_initial_fit = FALSE,
-    reference = c("zero", "sample"), # NYI
-    ...
+  object,
+  xnew,
+  type = c("absrisk", "risk"),
+  event = 1,
+  times = NULL,
+  use_initial_fit = FALSE,
+  reference = c("zero", "sample"), # NYI
+  ...
 ) {
-  
   type <- match.arg(type)
   reference <- match.arg(reference)
   #browser()
   # Accessing either initial glmnet fit or last fwelnet fits
   # Names of objects in cooper return value list
   which_model <- ifelse(use_initial_fit, "initial_fit", "fwelfits")
-  
+
   # subset to ensure only predictors are contained in new data
   # if new data is a data.table this would need with = FALSE
-  stopifnot("xnew must contain all original predictors" = all(object$predictors %in% names(xnew)))
-  if (inherits(xnew, "data.table")) xnew <- as.data.frame(xnew)
+  stopifnot(
+    "xnew must contain all original predictors" = all(
+      object$predictors %in% names(xnew)
+    )
+  )
+  if (inherits(xnew, "data.table")) {
+    xnew <- as.data.frame(xnew)
+  }
   xnew <- xnew[, object$predictors, drop = FALSE]
 
   if (type == "risk") {
     # If event is length 2, lapply
-    linpred <- do.call(rbind, lapply(event, function(e) {
-      lp <- predict(object[[which_model]][[e]], xnew = x_modelmat(object, xnew), type = "link", s = "lambda.min")
-      lp <- as.vector(lp)
-      
-      data.frame(
-        id = seq_along(lp),
-        event = e,
-        lp = lp,
-        eXb = exp(lp)
-      )
-    }))
-   
+    linpred <- do.call(
+      rbind,
+      lapply(event, function(e) {
+        lp <- predict(
+          object[[which_model]][[e]],
+          xnew = x_modelmat(object, xnew),
+          type = "link",
+          s = "lambda.min"
+        )
+        lp <- as.vector(lp)
+
+        data.frame(
+          id = seq_along(lp),
+          event = e,
+          lp = lp,
+          eXb = exp(lp)
+        )
+      })
+    )
+
     return(linpred)
   }
-  
-  if (is.null(times)) stop("`times` needs to be supplied for absolute risk predictions.")
-  
+
+  if (is.null(times)) {
+    stop("`times` needs to be supplied for absolute risk predictions.")
+  }
+
   time_grid <- expand.grid(event = event, horizon = times)
 
   # I miss purrr.
-  do.call(rbind, Map(
-    function(event, horizon) {
-      get_abs_risk(object, xnew, event, horizon, use_initial_fit)
-    },
-    event = time_grid$event,
-    horizon = time_grid$horizon
-  ))
-  
+  do.call(
+    rbind,
+    Map(
+      function(event, horizon) {
+        get_abs_risk(object, xnew, event, horizon, use_initial_fit)
+      },
+      event = time_grid$event,
+      horizon = time_grid$horizon
+    )
+  )
 }
 
 # Simple utility to convert a data.frame input of new data to model matrix,
@@ -91,20 +109,30 @@ predict.cooper <- function(
 #' @importFrom stats reformulate
 x_modelmat <- function(object, xnew) {
   checkmate::assert_class(object, "cooper")
-  
+
   # drop = FALSE: keep a matrix (with colnames) when xnew has a single row
-  xmat <- model.matrix(stats::reformulate(object$predictors), data = xnew)[, -1, drop = FALSE]
-  
+  xmat <- model.matrix(stats::reformulate(object$predictors), data = xnew)[,
+    -1,
+    drop = FALSE
+  ]
+
   if (!identical(colnames(xmat), colnames(object$x))) {
-    stop(paste("`xnew` does not match original training data format after applying model.matrix().",
-               "Ensure `xnew` includes the correct variables of the same types as the original data."))
+    stop(paste(
+      "`xnew` does not match original training data format after applying model.matrix().",
+      "Ensure `xnew` includes the correct variables of the same types as the original data."
+    ))
   }
-  
+
   xmat
 }
 
-get_abs_risk <- function(object, xnew, event, horizon, use_initial_fit = FALSE) {
-
+get_abs_risk <- function(
+  object,
+  xnew,
+  event,
+  horizon,
+  use_initial_fit = FALSE
+) {
   # Shared grid of all event times (both causes) so the cause-specific CIFs use the same
   # product-limit survival -- required for CIF1 + CIF2 + S(t) to telescope to 1.
   event_times <- sort(unique(unlist(
@@ -113,11 +141,22 @@ get_abs_risk <- function(object, xnew, event, horizon, use_initial_fit = FALSE) 
 
   # Cause-specific cumulative hazards H_k(t|x) on the shared event-time grid.
   cumhaz <- lapply(1:2, function(e) {
-    cumulative_hazard(object, xnew, event = e, times = event_times, use_initial_fit = use_initial_fit)
+    cumulative_hazard(
+      object,
+      xnew,
+      event = e,
+      times = event_times,
+      use_initial_fit = use_initial_fit
+    )
   })
 
   # Per-step increments dLambda_k(t_j|x); first row is the value at t_1 (since H(t_0) = 0).
-  row_incr <- function(M) rbind(M[1, , drop = FALSE], M[-1, , drop = FALSE] - M[-nrow(M), , drop = FALSE])
+  row_incr <- function(M) {
+    rbind(
+      M[1, , drop = FALSE],
+      M[-1, , drop = FALSE] - M[-nrow(M), , drop = FALSE]
+    )
+  }
   dL_total <- row_incr(Reduce(`+`, cumhaz))
   dL_event <- row_incr(cumhaz[[event]])
 
@@ -125,7 +164,7 @@ get_abs_risk <- function(object, xnew, event, horizon, use_initial_fit = FALSE) 
   # overall survival S(t_j) = prod_{k<=j}(1 - dLambda_total(t_k)) and S(t_0) = 1. Using the
   # product-limit (not exp(-H)) makes CIF1 + CIF2 + S(t) telescope to 1 exactly.
   surv <- apply(1 - dL_total, 2, cumprod)
-  surv <- matrix(surv, nrow = nrow(dL_total))  # keep times x obs shape when nrow(xnew) == 1
+  surv <- matrix(surv, nrow = nrow(dL_total)) # keep times x obs shape when nrow(xnew) == 1
   surv_prev <- rbind(1, surv[-nrow(surv), , drop = FALSE])
 
   abs_risk <- colSums(dL_event * surv_prev)
@@ -141,8 +180,10 @@ get_abs_risk <- function(object, xnew, event, horizon, use_initial_fit = FALSE) 
 # Get event times (i.e. status != 0) from Surv() object
 # Since these models have status in 0/1, the event param is kind of superfluous and only 1 is used.
 get_event_times <- function(surv, horizon = NULL) {
-  if (is.null(horizon)) horizon <- max(surv[, 1])
-  
+  if (is.null(horizon)) {
+    horizon <- max(surv[, 1])
+  }
+
   idx <- which((surv[, 1] <= horizon) & (surv[, 2] == 1))
   surv[idx, 1]
 }
@@ -160,37 +201,46 @@ get_event_times <- function(surv, horizon = NULL) {
 #' @examples
 #' if (requireNamespace("riskRegression")) {
 #' library(riskRegression)
-#' 
+#'
 #' data(pbc, package = "survival")
 #' pbc <- na.omit(pbc)
 #' xtrain <- pbc[1:270, -1]
 #' xtest <- pbc[270:276, -1]
-#' 
+#'
 #' set.seed(12)
 #' cooperfit <- cooper(
 #'   xtrain, mt_max_iter = 3,
 #'   stratify_by_status = TRUE
 #' )
-#' 
+#'
 #' predictRisk(cooperfit, xtest, cause = 1, times = c(1180.5, 1788))
-#' 
+#'
 #' }
-predictRisk.cooper <- function(object, newdata, times, cause, use_initial_fit = FALSE, ...) {
+predictRisk.cooper <- function(
+  object,
+  newdata,
+  times,
+  cause,
+  use_initial_fit = FALSE,
+  ...
+) {
   checkmate::assert_int(cause, lower = 1, upper = 2)
-  
-  res <- do.call(cbind, lapply(times, function(time) {
-    risk <- predict(
-      object, 
-      xnew = newdata, 
-      type = "absrisk", 
-      event = cause, 
-      times = time, 
-      use_initial_fit = use_initial_fit
-    )[["absolute_risk"]]
-    as.matrix(risk)
-  }))
-  
+
+  res <- do.call(
+    cbind,
+    lapply(times, function(time) {
+      risk <- predict(
+        object,
+        xnew = newdata,
+        type = "absrisk",
+        event = cause,
+        times = time,
+        use_initial_fit = use_initial_fit
+      )[["absolute_risk"]]
+      as.matrix(risk)
+    })
+  )
+
   colnames(res) <- times
   res
 }
-

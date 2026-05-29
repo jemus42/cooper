@@ -76,9 +76,9 @@ by \code{beta2} and \code{beta1} from the previous iteration step respectively.}
 variable, leading to folds with roughly equal proportions of events as in \code{data}.
 This is helpful in cases where many censored observations in folds lead to errors during model fits.}
 
-\item{alpha}{\code{(1)} Passed to \code{\link[=glmnet]{glmnet()}} and \code{\link[=fwelnet]{fwelnet()}}.}
+\item{alpha}{\code{(1)} Passed to \code{\link[glmnet:glmnet]{glmnet()}} and \code{\link[=fwelnet]{fwelnet()}}.}
 
-\item{standardize}{Passed to \code{\link{cv.fwelnet}} and \code{\link{cv.glmnet}} respectively.}
+\item{standardize}{Passed to \code{\link{cv.fwelnet}} and \code{\link[glmnet:cv.glmnet]{cv.glmnet}} respectively.}
 
 \item{verbose}{Display informative message on the state of the mt fit.}
 

@@ -11,7 +11,12 @@ test_that("Parity with glmnet", {
   fwfit <- fwelnet(x, y, z, family = "gaussian")
   gfit <- glmnet::glmnet(x, y, family = "gaussian")
 
-  expect_equal(fwfit$beta, as.matrix(gfit$beta), ignore_attr = TRUE, tolerance = 1e-5)
+  expect_equal(
+    fwfit$beta,
+    as.matrix(gfit$beta),
+    ignore_attr = TRUE,
+    tolerance = 1e-5
+  )
   expect_equal(gfit$lambda, fwfit$lambda)
 })
 
@@ -26,8 +31,10 @@ test_that("Not-parity with glmnet", {
 
   expect_failure(
     expect_equal(
-      fwfit$beta[1,], as.matrix(gfit$beta)[1,],
-      ignore_attr = TRUE, tolerance = 1e-5
+      fwfit$beta[1, ],
+      as.matrix(gfit$beta)[1, ],
+      ignore_attr = TRUE,
+      tolerance = 1e-5
     )
   )
   expect_equal(gfit$lambda, fwfit$lambda)
@@ -53,7 +60,6 @@ test_that("CV parity with glmnet", {
   gfit <- glmnet::cv.glmnet(x, y, family = "gaussian", lambda = lambda_seq)
   expect_equal(gfit$lambda, fwfit$lambda)
 
-
   fwfit <- cv.fwelnet(x, y, z, family = "gaussian", lambda = rev(lambda_seq))
   gfit <- glmnet::cv.glmnet(x, y, family = "gaussian", lambda = rev(lambda_seq))
   expect_equal(gfit$lambda, fwfit$lambda)
@@ -66,8 +72,23 @@ test_that("Complete parity with glmnet", {
   nfolds <- 10
   foldid <- sample(rep(seq(nfolds), length = n))
 
-  fwfit <- cv.fwelnet(x, y, z, family = "gaussian", lambda = lambda_seq, foldid = foldid, nfolds = nfolds)
-  gfit <- glmnet::cv.glmnet(x, y, family = "gaussian", lambda = lambda_seq, foldid = foldid, nfolds = nfolds)
+  fwfit <- cv.fwelnet(
+    x,
+    y,
+    z,
+    family = "gaussian",
+    lambda = lambda_seq,
+    foldid = foldid,
+    nfolds = nfolds
+  )
+  gfit <- glmnet::cv.glmnet(
+    x,
+    y,
+    family = "gaussian",
+    lambda = lambda_seq,
+    foldid = foldid,
+    nfolds = nfolds
+  )
 
   expect_equal(gfit$lambda.min, fwfit$lambda.min)
   expect_equal(gfit$cvm, fwfit$cvm)
@@ -80,8 +101,23 @@ test_that("CV non-parity with glmnet", {
   nfolds <- 10
   foldid <- rep(seq(nfolds), length = n)
 
-  fwfit <- cv.fwelnet(x, y, z, family = "gaussian", lambda = lambda_seq, foldid = foldid, nfolds = nfolds)
-  gfit <- glmnet::cv.glmnet(x, y, family = "gaussian", lambda = lambda_seq, foldid = foldid, nfolds = nfolds)
+  fwfit <- cv.fwelnet(
+    x,
+    y,
+    z,
+    family = "gaussian",
+    lambda = lambda_seq,
+    foldid = foldid,
+    nfolds = nfolds
+  )
+  gfit <- glmnet::cv.glmnet(
+    x,
+    y,
+    family = "gaussian",
+    lambda = lambda_seq,
+    foldid = foldid,
+    nfolds = nfolds
+  )
 
   expect_equal(gfit$lambda, fwfit$lambda)
   # expect_failure(expect_equal(gfit$lambda.min, fwfit$lambda.min))
@@ -93,12 +129,19 @@ test_that("CV non-parity with glmnet", {
 
 test_that("Fixing theta works", {
   z <- matrix(rnorm(p, sd = 2), ncol = 1, nrow = p)
-  
+
   set.seed(3)
   fwfit <- fwelnet(x, y, z, family = "gaussian")
 
-  fwfit_fix <- fwelnet(x, y, z, family = "gaussian", theta = fwfit$theta, lambda = fwfit$lambda)
-  
+  fwfit_fix <- fwelnet(
+    x,
+    y,
+    z,
+    family = "gaussian",
+    theta = fwfit$theta,
+    lambda = fwfit$lambda
+  )
+
   expect_identical(fwfit$theta, fwfit_fix$theta)
   expect_identical(fwfit$beta, fwfit_fix$beta)
   expect_identical(fwfit$nzero, fwfit_fix$nzero)
@@ -107,11 +150,23 @@ test_that("Fixing theta works", {
 
 test_that("Fixing theta works, reducing to glmnet solution", {
   z <- matrix(1, ncol = 1, nrow = p)
-  
+
   set.seed(3)
   glmfit <- glmnet::glmnet(x, y, family = "gaussian")
-  fwfit_fix <- fwelnet(x, y, z, family = "gaussian", theta = 1, lambda = glmfit$lambda)
-  
+  fwfit_fix <- fwelnet(
+    x,
+    y,
+    z,
+    family = "gaussian",
+    theta = 1,
+    lambda = glmfit$lambda
+  )
+
   expect_identical(fwfit_fix$theta, as.matrix(1))
-  expect_equal(fwfit_fix$beta, as.matrix(glmfit$beta), ignore_attr = TRUE, tolerance = 1e-5)
+  expect_equal(
+    fwfit_fix$beta,
+    as.matrix(glmfit$beta),
+    ignore_attr = TRUE,
+    tolerance = 1e-5
+  )
 })

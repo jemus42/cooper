@@ -81,176 +81,231 @@
 #' @importFrom stats predict
 #' @importFrom glmnet glmnet coxnet.deviance
 #' @export
-cv.fwelnet <- function(x, y, z, family = c("gaussian", "binomial", "cox"), lambda = NULL,
-                       type.measure = c("mse", "deviance", "class", "auc", "mae"),
-                       nfolds = 10, foldid = NULL, keep = FALSE, verbose = FALSE, 
-                       t = 1, a = 0.5, thresh = 1e-3,
-                       ...) {
-    this.call <- match.call()
+cv.fwelnet <- function(
+  x,
+  y,
+  z,
+  family = c("gaussian", "binomial", "cox"),
+  lambda = NULL,
+  type.measure = c("mse", "deviance", "class", "auc", "mae"),
+  nfolds = 10,
+  foldid = NULL,
+  keep = FALSE,
+  verbose = FALSE,
+  t = 1,
+  a = 0.5,
+  thresh = 1e-3,
+  ...
+) {
+  this.call <- match.call()
 
-    n <- nrow(x); p <- ncol(x); K <- ncol(z)
-    family <- match.arg(family)
-    if (family != "cox") {
-      # Previous default behavior unsuitable for y if Surv() object
-      y <- as.vector(y)
-    }
+  n <- nrow(x)
+  p <- ncol(x)
+  K <- ncol(z)
+  family <- match.arg(family)
+  if (family != "cox") {
+    # Previous default behavior unsuitable for y if Surv() object
+    y <- as.vector(y)
+  }
 
-    # get type.measure
-    if (missing(type.measure)) {
-      # Previous behaviour
-      # type.measure <- ifelse(family == "gaussian", "mse", "deviance")
+  # get type.measure
+  if (missing(type.measure)) {
+    # Previous behaviour
+    # type.measure <- ifelse(family == "gaussian", "mse", "deviance")
 
-      # Setting cox -> deviance, and deviance for binomial as previous default
-        type.measure <- switch (family,
-          "gaussian" = "mse",
-          "binomial" = "deviance",
-          "cox" = "deviance"
-        )
-    } else {
-        type.measure <- match.arg(type.measure)
-    }
+    # Setting cox -> deviance, and deviance for binomial as previous default
+    type.measure <- switch(
+      family,
+      "gaussian" = "mse",
+      "binomial" = "deviance",
+      "cox" = "deviance"
+    )
+  } else {
+    type.measure <- match.arg(type.measure)
+  }
 
-    # if fold IDs not given, randomly create them
-    # if given, count the number of folds
-    if (is.null(foldid)) {
-        foldid <- sample(rep(seq(nfolds), length = n))
-    } else {
-        nfolds <- max(foldid)
-    }
-    if (nfolds < 3) {
-        stop("nfolds must be bigger than 3; nfolds=10 recommended")
-    }
+  # if fold IDs not given, randomly create them
+  # if given, count the number of folds
+  if (is.null(foldid)) {
+    foldid <- sample(rep(seq(nfolds), length = n))
+  } else {
+    nfolds <- max(foldid)
+  }
+  if (nfolds < 3) {
+    stop("nfolds must be bigger than 3; nfolds=10 recommended")
+  }
 
-    # get fwelnet fit for all of the data
-    fit0 <- fwelnet(x, y, z, lambda = lambda, family = family, t = t, a = a, thresh = thresh, ...)
+  # get fwelnet fit for all of the data
+  fit0 <- fwelnet(
+    x,
+    y,
+    z,
+    lambda = lambda,
+    family = family,
+    t = t,
+    a = a,
+    thresh = thresh,
+    ...
+  )
+  if (verbose) {
+    cat("Initial fit done", fill = TRUE)
+  }
+  nz <- colSums(abs(fit0$beta) > 0)
+
+  # fit fwelnet on folds
+  fits <- vector("list", nfolds)
+  for (ii in 1:nfolds) {
     if (verbose) {
-        cat("Initial fit done", fill = TRUE)
+      cat(c("Fold = ", ii), fill = TRUE)
     }
-    nz <- colSums(abs(fit0$beta) > 0)
+    oo <- foldid == ii
+    xc <- x[!oo, , drop = FALSE]
+    yy <- y[!oo]
+    fits[[ii]] <- fwelnet(
+      xc,
+      yy,
+      z,
+      lambda = fit0$lambda,
+      family = family,
+      verbose = verbose,
+      t = t,
+      a = a,
+      thresh = thresh,
+      ...
+    )
+  }
 
-    # fit fwelnet on folds
-    fits <- vector("list", nfolds)
-    for (ii in 1:nfolds) {
-        if (verbose) {
-            cat(c("Fold = ", ii), fill = TRUE)
-        }
-        oo <- foldid == ii
-        xc <- x[!oo, , drop = FALSE]
-        yy <- y[!oo]
-        fits[[ii]] <- fwelnet(xc, yy, z, lambda = fit0$lambda, family = family,
-                               verbose = verbose, t = t, a = a, thresh = thresh, ...)
-    }
+  # get predictions
+  predmat <- matrix(NA, n, length(fit0$lambda))
+  for (ii in 1:nfolds) {
+    oo <- foldid == ii
 
-    # get predictions
-    predmat <- matrix(NA, n, length(fit0$lambda))
-    for (ii in 1:nfolds) {
-      oo <- foldid == ii
-
-      if (family != "cox") {
-        out <- predict(fits[[ii]], x[oo, , drop = F])
-        predmat[oo, 1:ncol(out)] <- out
-      }
-
-      if (family == "cox") {
-        # If cox, add nll here
-        # fit on test data
-        fits[[ii]]$nll <- glmnet::coxnet.deviance(
-          x = x[oo, , drop = F],
-          y = y[oo, , drop = F],
-          beta = fits[[ii]]$beta,
-          cox.ties = "breslow"  # lock glmnet 5.0 default (see cooper())
-        )
-      }
+    if (family != "cox") {
+      out <- predict(fits[[ii]], x[oo, , drop = F])
+      predmat[oo, 1:ncol(out)] <- out
     }
 
-    # compute CV stuff (machinery borrowed from glmnet)
-    weights <- rep(1, n); grouped = TRUE  # for compatibility w glmnet
-    if (family == "gaussian") {
-        cvstuff <- cv.elnet(predmat, y, type.measure, weights, foldid, grouped)
-        name <- ifelse(type.measure == "mae", "Mean Absolute Error",
-                       "Mean-Squared Error")
-    } else if (family == "binomial") {
-        cvstuff <- cv.lognet(predmat, y, type.measure, weights, foldid, grouped)
-        name <- switch(type.measure,
-                       deviance = "Binomial Deviance",
-                       class = "Misclassification Error",
-                       auc = "AUC")
-    } else if (family == "cox") {
-      # nll calc done above during fit step so access x, y in folds
-      # or better to use glmnet::coxnet.deviance probably
-      # nll per fold is fine for now unless it isn't?
-      cvstuff <- list(
-        # usually N x nlam matrix, but we only have nfold x nlam, so yeah.
-        # This is not a nice way to do it but it works, I guess
-        cvraw = t(vapply(fits, function(x) x$nll, FUN.VALUE = double(length(fit0$lambda)))),
-        weights = weights, # See above
-        # Number of events in fold maybe rather than raw N?
-        # N = vapply(fits, function(x) x$n_events, FUN.VALUE = double(1)),
-        type.measure = type.measure,
-        grouped = TRUE # for compatibility? see above
-      )
-      name <- "Cox Deviance"
-    }
-
-    # Hacky special handling for the somewhat incomplete cox case
-    # FIXME: All of this should just use glmnet machinery but time is finite
     if (family == "cox") {
-      # average deviance per lambda across folds (rows = folds, cols = lambdas)
-      mean_nll_per_lambda <- apply(cvstuff$cvraw, 2, mean)
-      # index of lambda with smallest nll
-      best_lambda_i <- which.min(mean_nll_per_lambda)
-      lambda.min <- fit0$lambda[best_lambda_i]
-
-      out <- list(
-        glmfit = fit0,
-        lambda = fit0$lambda,
-        nzero = fit0$nzero,
-        # fit.preval=predmat.preval,
-        cvm = colMeans(cvstuff$cvraw),
-        # cvsd=cvsd,
-        # cvlo=cvlo,
-        # cvup=cvup,
-        lambda.min = lambda.min,
-        # lambda.1se=lambda.1se,
-        # foldid=foldid_copy,
-        name = name,
-        call = this.call
+      # If cox, add nll here
+      # fit on test data
+      fits[[ii]]$nll <- glmnet::coxnet.deviance(
+        x = x[oo, , drop = F],
+        y = y[oo, , drop = F],
+        beta = fits[[ii]]$beta,
+        cox.ties = "breslow" # lock glmnet 5.0 default (see cooper())
       )
-      class(out) <- "cv.fwelnet"
-
-      return(out)
     }
+  }
 
-    cvout <- cvstats(cvstuff, foldid, nfolds, lambda, nz, cvstuff$grouped)
-    cvm <- cvout$cvm
-    cvsd <- cvout$cvsd
-    cvup <- cvout$cvup
-    cvlo <- cvout$cvlo
+  # compute CV stuff (machinery borrowed from glmnet)
+  weights <- rep(1, n)
+  grouped = TRUE # for compatibility w glmnet
+  if (family == "gaussian") {
+    cvstuff <- cv.elnet(predmat, y, type.measure, weights, foldid, grouped)
+    name <- ifelse(
+      type.measure == "mae",
+      "Mean Absolute Error",
+      "Mean-Squared Error"
+    )
+  } else if (family == "binomial") {
+    cvstuff <- cv.lognet(predmat, y, type.measure, weights, foldid, grouped)
+    name <- switch(
+      type.measure,
+      deviance = "Binomial Deviance",
+      class = "Misclassification Error",
+      auc = "AUC"
+    )
+  } else if (family == "cox") {
+    # nll calc done above during fit step so access x, y in folds
+    # or better to use glmnet::coxnet.deviance probably
+    # nll per fold is fine for now unless it isn't?
+    cvstuff <- list(
+      # usually N x nlam matrix, but we only have nfold x nlam, so yeah.
+      # This is not a nice way to do it but it works, I guess
+      cvraw = t(vapply(
+        fits,
+        function(x) x$nll,
+        FUN.VALUE = double(length(fit0$lambda))
+      )),
+      weights = weights, # See above
+      # Number of events in fold maybe rather than raw N?
+      # N = vapply(fits, function(x) x$n_events, FUN.VALUE = double(1)),
+      type.measure = type.measure,
+      grouped = TRUE # for compatibility? see above
+    )
+    name <- "Cox Deviance"
+  }
 
-    predmat.preval <- NULL
-    foldid_copy <- NULL
-    if (keep) {
-        predmat.preval <- predmat
-        foldid_copy <- foldid
-    }
+  # Hacky special handling for the somewhat incomplete cox case
+  # FIXME: All of this should just use glmnet machinery but time is finite
+  if (family == "cox") {
+    # average deviance per lambda across folds (rows = folds, cols = lambdas)
+    mean_nll_per_lambda <- apply(cvstuff$cvraw, 2, mean)
+    # index of lambda with smallest nll
+    best_lambda_i <- which.min(mean_nll_per_lambda)
+    lambda.min <- fit0$lambda[best_lambda_i]
 
-    # get best and 1se lambda
-    if (type.measure == "auc") {
-        imin <- which.max(cvm)
-        lambda.min <- fit0$lambda[imin]
-        imin.1se <- which(cvm > cvm[imin] - cvsd[imin])[1]
-        lambda.1se <- fit0$lambda[imin.1se]
-    } else {
-        imin <- which.min(cvm)
-        lambda.min <- fit0$lambda[imin]
-        imin.1se <- which(cvm < cvm[imin] + cvsd[imin])[1]
-        lambda.1se <- fit0$lambda[imin.1se]
-    }
-
-    out <- list(glmfit=fit0, lambda=fit0$lambda, nzero=fit0$nzero,
-                fit.preval=predmat.preval, cvm=cvm, cvsd=cvsd, cvlo=cvlo,
-                cvup=cvup, lambda.min=lambda.min, lambda.1se=lambda.1se,
-                foldid=foldid_copy, name=name, call=this.call)
+    out <- list(
+      glmfit = fit0,
+      lambda = fit0$lambda,
+      nzero = fit0$nzero,
+      # fit.preval=predmat.preval,
+      cvm = colMeans(cvstuff$cvraw),
+      # cvsd=cvsd,
+      # cvlo=cvlo,
+      # cvup=cvup,
+      lambda.min = lambda.min,
+      # lambda.1se=lambda.1se,
+      # foldid=foldid_copy,
+      name = name,
+      call = this.call
+    )
     class(out) <- "cv.fwelnet"
+
     return(out)
+  }
+
+  cvout <- cvstats(cvstuff, foldid, nfolds, lambda, nz, cvstuff$grouped)
+  cvm <- cvout$cvm
+  cvsd <- cvout$cvsd
+  cvup <- cvout$cvup
+  cvlo <- cvout$cvlo
+
+  predmat.preval <- NULL
+  foldid_copy <- NULL
+  if (keep) {
+    predmat.preval <- predmat
+    foldid_copy <- foldid
+  }
+
+  # get best and 1se lambda
+  if (type.measure == "auc") {
+    imin <- which.max(cvm)
+    lambda.min <- fit0$lambda[imin]
+    imin.1se <- which(cvm > cvm[imin] - cvsd[imin])[1]
+    lambda.1se <- fit0$lambda[imin.1se]
+  } else {
+    imin <- which.min(cvm)
+    lambda.min <- fit0$lambda[imin]
+    imin.1se <- which(cvm < cvm[imin] + cvsd[imin])[1]
+    lambda.1se <- fit0$lambda[imin.1se]
+  }
+
+  out <- list(
+    glmfit = fit0,
+    lambda = fit0$lambda,
+    nzero = fit0$nzero,
+    fit.preval = predmat.preval,
+    cvm = cvm,
+    cvsd = cvsd,
+    cvlo = cvlo,
+    cvup = cvup,
+    lambda.min = lambda.min,
+    lambda.1se = lambda.1se,
+    foldid = foldid_copy,
+    name = name,
+    call = this.call
+  )
+  class(out) <- "cv.fwelnet"
+  return(out)
 }
