@@ -49,8 +49,7 @@ xtest <- pbc[270:276, -1]
 set.seed(12)
 cooperfit <- cooper(
   xtrain, mt_max_iter = 3,
-  stratify_by_status = TRUE,
-  standardize = FALSE # Currently required to ensure correct results
+  stratify_by_status = TRUE
 )
 
 predict(cooperfit, xnew = xtest, type = "risk", event = 1)
