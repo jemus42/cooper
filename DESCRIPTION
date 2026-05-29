@@ -15,7 +15,7 @@ License: GPL-3
 Imports: 
     checkmate,
     data.table,
-    glmnet,
+    glmnet (>= 5.0),
     Matrix,
     stats,
     survival

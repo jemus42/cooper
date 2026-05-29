@@ -156,8 +156,10 @@ cooper <- function(data,
 
   # Alg step 1) Initialize b1_0, b2_0 at lambda.min glmnet solution
   # for y_1, y_2 respectively
-  gl1 <- glmnet::cv.glmnet(X, y_list[[1]], family = "cox", alpha = alpha, foldid = y1foldids, standardize = standardize)
-  gl2 <- glmnet::cv.glmnet(X, y_list[[2]], family = "cox", alpha = alpha, foldid = y2foldids, standardize = standardize)
+  # cox.ties = "breslow" locks the glmnet 5.0 default; 5.1 switches to "efron", which would
+  # silently change the published results (and otherwise emits a deprecation warning per fit).
+  gl1 <- glmnet::cv.glmnet(X, y_list[[1]], family = "cox", alpha = alpha, foldid = y1foldids, standardize = standardize, cox.ties = "breslow")
+  gl2 <- glmnet::cv.glmnet(X, y_list[[2]], family = "cox", alpha = alpha, foldid = y2foldids, standardize = standardize, cox.ties = "breslow")
 
   b1_0 <- gl1$glmnet.fit$beta[, which(gl1$lambda == gl1$lambda.min)]
   b2_0 <- gl2$glmnet.fit$beta[, which(gl2$lambda == gl2$lambda.min)]

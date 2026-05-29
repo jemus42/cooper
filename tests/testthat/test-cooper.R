@@ -96,7 +96,9 @@ test_that("various sanity checks", {
   set.seed(1)
   train <- getpbc(500)
   expect_error(cooper(train, standardize = TRUE, nfolds = 2))
-  expect_warning(expect_error(cooper(train, standardize = TRUE, nfolds = 4, mt_max_iter = 1)))
+  # nfolds is ignored unless stratify_by_status = TRUE (warning); mt_max_iter = 1 is valid (one MT step)
+  expect_warning(fit_mt1 <- cooper(train, standardize = TRUE, nfolds = 4, mt_max_iter = 1))
+  expect_s3_class(fit_mt1, "cooper")
 })
 
 

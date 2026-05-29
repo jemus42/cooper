@@ -23,8 +23,7 @@
 #' set.seed(12)
 #' cooperfit <- cooper(
 #'   xtrain, mt_max_iter = 3,
-#'   stratify_by_status = TRUE,
-#'   standardize = FALSE # Currently required to ensure correct results
+#'   stratify_by_status = TRUE
 #' )
 #' 
 #' predict(cooperfit, xnew = xtest, type = "risk", event = 1)
@@ -93,7 +92,8 @@ predict.cooper <- function(
 x_modelmat <- function(object, xnew) {
   checkmate::assert_class(object, "cooper")
   
-  xmat <- model.matrix(stats::reformulate(object$predictors), data = xnew)[, -1]
+  # drop = FALSE: keep a matrix (with colnames) when xnew has a single row
+  xmat <- model.matrix(stats::reformulate(object$predictors), data = xnew)[, -1, drop = FALSE]
   
   if (!identical(colnames(xmat), colnames(object$x))) {
     stop(paste("`xnew` does not match original training data format after applying model.matrix().",
@@ -104,32 +104,32 @@ x_modelmat <- function(object, xnew) {
 }
 
 get_abs_risk <- function(object, xnew, event, horizon, use_initial_fit = FALSE) {
-  
-  event_times <- get_event_times(object$y[[event]], horizon = horizon)
-  #browser()
-  base_haz <- baseline_hazard(object, event = event, use_initial_fit = use_initial_fit)
-  base_haz <- base_haz[base_haz$time %in% event_times, "hazard", drop = FALSE]
-  # need is as an 1 x times matrix
-  base_haz <- t(base_haz)
-  
-  # Get cumhazards H_e for both event, subset to event times, to get marginal hazard, survival
-  cumhazards <- lapply(1:2, function(e) {
+
+  # Shared grid of all event times (both causes) so the cause-specific CIFs use the same
+  # product-limit survival -- required for CIF1 + CIF2 + S(t) to telescope to 1.
+  event_times <- sort(unique(unlist(
+    lapply(1:2, function(e) get_event_times(object$y[[e]], horizon = horizon))
+  )))
+
+  # Cause-specific cumulative hazards H_k(t|x) on the shared event-time grid.
+  cumhaz <- lapply(1:2, function(e) {
     cumulative_hazard(object, xnew, event = e, times = event_times, use_initial_fit = use_initial_fit)
   })
-  
-  # Get exp(eta), vector of length nrow(xnew)
-  risks <- predict(object, event = event, xnew = xnew, type = "risk")[["eXb"]]
 
-  marginal_chazard <- Reduce(`+`, cumhazards)
+  # Per-step increments dLambda_k(t_j|x); first row is the value at t_1 (since H(t_0) = 0).
+  row_incr <- function(M) rbind(M[1, , drop = FALSE], M[-1, , drop = FALSE] - M[-nrow(M), , drop = FALSE])
+  dL_total <- row_incr(Reduce(`+`, cumhaz))
+  dL_event <- row_incr(cumhaz[[event]])
 
-  marginal_surv <- apply(marginal_chazard, 2, \(H) exp(-H))
-  #marginal_surv <- exp(-marginal_chazard)
-  # (exp(eta) * h0(t)) * S(t)  -> he(t) * S(t)
+  # Aalen-Johansen estimator: CIF_e(t) = sum_j S(t_{j-1}) dLambda_e(t_j), with product-limit
+  # overall survival S(t_j) = prod_{k<=j}(1 - dLambda_total(t_k)) and S(t_0) = 1. Using the
+  # product-limit (not exp(-H)) makes CIF1 + CIF2 + S(t) telescope to 1 exactly.
+  surv <- apply(1 - dL_total, 2, cumprod)
+  surv <- matrix(surv, nrow = nrow(dL_total))  # keep times x obs shape when nrow(xnew) == 1
+  surv_prev <- rbind(1, surv[-nrow(surv), , drop = FALSE])
 
-  #  abs_risk <- as.vector(risks * base_haz %*% marginal_surv)
-  
-  abs_risk <- risks * as.vector(base_haz %*% marginal_surv)
-  
+  abs_risk <- colSums(dL_event * surv_prev)
+
   data.frame(
     id = seq_along(abs_risk),
     event = event,
@@ -169,8 +169,7 @@ get_event_times <- function(surv, horizon = NULL) {
 #' set.seed(12)
 #' cooperfit <- cooper(
 #'   xtrain, mt_max_iter = 3,
-#'   stratify_by_status = TRUE,
-#'   standardize = FALSE # Currently required to ensure correct results
+#'   stratify_by_status = TRUE
 #' )
 #' 
 #' predictRisk(cooperfit, xtest, cause = 1, times = c(1180.5, 1788))
